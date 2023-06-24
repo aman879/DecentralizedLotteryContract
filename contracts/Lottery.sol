@@ -8,7 +8,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
 error Lottery_NotEnoughtETHEntered();
-error Lotter_TransferFailed();
+error Lottery_TransferFailed();
 error Lottery__NotOpen();
 error Lottery_UpKeepNotNeeded();
 
@@ -31,10 +31,12 @@ contract Lottery is VRFConsumerBaseV2, AutomationCompatibleInterface {
     LotteryState private s_lotteryState;
     uint256 private s_lastTimeStamp;
     uint256 private immutable i_interval;
+    uint256 private requestId;
 
     event LotteryEnter(address indexed player);
     event RequestLotteryWinner(uint256 indexed requestId);
     event WinnerPicked(address indexed winner);
+    event Lottery_errorFound(bytes indexed error);
 
     constructor(
         address vrfCoordinatorV2,
@@ -81,7 +83,6 @@ contract Lottery is VRFConsumerBaseV2, AutomationCompatibleInterface {
         bool hasPlayers = (s_players.length > 0);
         bool hasBalance = address(this).balance > 0;
         upKeepNeeded = (isOpen && timePassed && hasPlayers && hasBalance);
-
         return (upKeepNeeded, "");
     }
 
@@ -90,9 +91,8 @@ contract Lottery is VRFConsumerBaseV2, AutomationCompatibleInterface {
         if (!upkeepNeeded) {
             revert Lottery_UpKeepNotNeeded();
         }
-
         s_lotteryState = LotteryState.CALCULATING;
-        uint256 requestId = i_vrfCoordinator.requestRandomWords(
+        requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subscriptionId,
             REQUEST_CONFIRMATIONS,
@@ -113,10 +113,13 @@ contract Lottery is VRFConsumerBaseV2, AutomationCompatibleInterface {
         s_lotteryState = LotteryState.OPEN;
         s_players = new address payable[](0);
         s_lastTimeStamp = block.timestamp;
-        (bool success, ) = recentWinner.call{value: address(this).balance}("");
+        (bool success, bytes memory error) = recentWinner.call{
+            value: address(this).balance
+        }("");
 
         if (!success) {
-            revert Lotter_TransferFailed();
+            emit Lottery_errorFound(error);
+            revert Lottery_TransferFailed();
         }
         emit WinnerPicked(recentWinner);
     }
@@ -151,6 +154,10 @@ contract Lottery is VRFConsumerBaseV2, AutomationCompatibleInterface {
 
     function getRequestConfirmation() public pure returns (uint256) {
         return REQUEST_CONFIRMATIONS;
+    }
+
+    function getRequestId() public view returns (uint256) {
+        return requestId;
     }
 
     function getInterval() public view returns (uint256) {

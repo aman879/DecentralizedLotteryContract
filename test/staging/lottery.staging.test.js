@@ -16,17 +16,16 @@ developmentChains.includes(network.name)
         lottery = await ethers.getContract("Lottery", deployer);
         lotteryEnranceFee = await lottery.getEntranceFee();
       });
-
       describe("fulFillRandomWords", function () {
-        it("works with live chainlink keepers and chainlink VRF, we get a random winner", async function () {
+        it("work with live chainlink keepers and chainlink VRF, we get a random winner", async function () {
           const startingTimeStamp = await lottery.getLatestTimeStamp();
           const accounts = await ethers.getSigners();
 
           console.log("above Promise");
 
           await new Promise(async (resolve, reject) => {
-            const winnerPickedListener = async () => {
-              console.log("WinnerPicked event fired");
+            lottery.once("WinnerPicked", async () => {
+              console.log("winnerPicked event fired");
               try {
                 const recentWinner = await lottery.getRecentWinner();
                 const lotteryState = await lottery.getLotteryState();
@@ -41,26 +40,18 @@ developmentChains.includes(network.name)
                   winnerStartingBalance.add(lotteryEnranceFee).toString()
                 );
                 assert(endingTimeStamp > startingTimeStamp);
-                console.log("RESOLVED");
+                console.log("REOLVED");
                 resolve();
               } catch (e) {
-                console.log("Error:", e);
+                console.log("Error");
                 reject(e);
               }
-            };
-
-            // Add a listener for debugging purposes
-            lottery.on("WinnerPicked", winnerPickedListener);
-
+            });
             console.log("outside try-catch inside Promise");
             await lottery.enterLottery({ value: lotteryEnranceFee });
             const winnerStartingBalance = await accounts[0].getBalance();
           });
-
           console.log("Outside Promise");
-
-          // Remove the event listener after the test
-          lottery.off("WinnerPicked", winnerPickedListener);
         });
       });
     });
